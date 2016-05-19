@@ -1,0 +1,83 @@
+#!/usr/bin/perl -w
+use strict;
+use VMware::VIRuntime;
+
+my %opts = (
+	ip => {
+		type => "=s",
+		help => "Enter the IP Address you want to search",
+		required => 1,
+	},
+);
+
+Opts::add_options(%opts);
+Opts::parse();
+
+if ( Opts::get_option('server') eq 'localhost' ) {
+	Opts::set_option('server', 'xxx.xxx.xxx.xxx');
+}
+
+if ( ! Opts::get_option('username') ) {
+	Opts::set_option('username', 'xxxxxxx');
+}
+
+if ( ! Opts::get_option('password') ) {
+	Opts::set_option('password', 'xxxxxxx');
+}
+
+my $ip = Opts::get_option('ip');
+my $long_ip;
+my $short_ip;
+my $server_name;
+if ( $ip =~ /^\d{1,3}\.\d{1,3}.(\d{1,3}\.\d{1,3})$/ ) {
+	$short_ip = $1;
+	$long_ip = $ip;
+}
+elsif ( $ip =~ /^\d{1,3}\.\d{1,3}$/ ) {
+	$short_ip = $ip;
+	$long_ip = "xxx.xxx.".$ip;
+}
+else {
+	$long_ip = $ip;
+	$short_ip = $ip;
+}
+
+Opts::validate();
+Util::connect();
+
+my $vm;
+
+$vm = Vim::find_entity_view ( view_type => "VirtualMachine",
+	properties => [ "config", "name", "summary", "parent", "runtime" ],
+	filter	=> { 
+		'summary.guest.ipAddress' => qr/^$long_ip$/,
+	},
+	filter => {
+		'name' => qr/$short_ip/,
+	},
+	filter => {
+		'name' => qr/$long_ip/,
+	},
+);
+
+if ( not defined $vm ) {
+	die "vm not found";
+}
+
+print "Name: ".$vm->name."\n";
+
+print_path($vm->runtime->host);
+
+sub print_path {
+	my $entity = shift;
+
+	unless (defined $entity) {
+		return;
+	}
+
+	my $entity_view = Vim::get_view(mo_ref => $entity, properties => [ "name", "parent" ]);
+	print_path($entity_view->parent);
+	print "\t".$entity_view->name."\n";
+}
+
+Util::disconnect();
